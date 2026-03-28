@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>〇×ゲーム</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Zen+Antique&family=M+PLUS+Rounded+1c:wght@400;800&display=swap');
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #1a1a1a;
+    --border: #2e2e2e;
+    --o-color: #ff6b6b;
+    --x-color: #4ecdc4;
+    --win-glow: #ffd93d;
+    --text: #f0ece2;
+    --muted: #666;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 20%, rgba(255,107,107,0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(78,205,196,0.08) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  h1 {
+    font-family: 'Zen Antique', serif;
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    letter-spacing: 0.3em;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--o-color), var(--x-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    font-size: 0.8rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    margin-bottom: 32px;
+  }
+
+  /* Score board */
+  .scoreboard {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+
+  .player-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 28px;
+    text-align: center;
+    position: relative;
+    transition: all 0.3s ease;
+    min-width: 100px;
+  }
+
+  .player-card.active {
+    border-color: currentColor;
+    box-shadow: 0 0 20px currentColor;
+    transform: translateY(-3px);
+  }
+
+  .player-card.o-card { color: var(--o-color); }
+  .player-card.x-card { color: var(--x-color); }
+
+  .player-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .player-symbol {
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .player-score {
+    font-size: 1.2rem;
+    font-weight: 800;
+    margin-top: 4px;
+  }
+
+  .vs-badge {
+    display: flex;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 800;
+  }
+
+  /* Status */
+  .status {
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+    margin-bottom: 24px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  /* Board */
+  .board-wrap {
+    position: relative;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    background: transparent;
+  }
+
+  .cell {
+    width: clamp(90px, 22vw, 130px);
+    height: clamp(90px, 22vw, 130px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .cell:hover:not(.taken) {
+    background: #252525;
+    border-color: #444;
+    transform: scale(1.05);
+  }
+
+  .cell.taken { cursor: default; }
+
+  .cell.o { color: var(--o-color); }
+  .cell.x { color: var(--x-color); }
+
+  .cell.win {
+    background: rgba(255, 217, 61, 0.12);
+    border-color: var(--win-glow);
+    box-shadow: 0 0 24px rgba(255, 217, 61, 0.3);
+    animation: winPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes winPop {
+    0% { transform: scale(0.85); }
+    100% { transform: scale(1); }
+  }
+
+  .cell-inner {
+    transform: scale(0);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .cell.taken .cell-inner {
+    transform: scale(1);
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+  }
+
+  .btn {
+    padding: 12px 28px;
+    border-radius: 40px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn:hover {
+    background: #252525;
+    border-color: #555;
+    transform: translateY(-2px);
+  }
+
+  .btn.primary {
+    background: linear-gradient(135deg, var(--o-color), var(--x-color));
+    border-color: transparent;
+    color: #000;
+  }
+
+  .btn.primary:hover {
+    opacity: 0.85;
+    transform: translateY(-2px);
+  }
+
+  /* Win overlay */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
+    z-index: 10;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .overlay.show { display: flex; }
+
+  .overlay-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 48px 56px;
+    text-align: center;
+    animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .overlay-emoji { font-size: 4rem; margin-bottom: 12px; }
+
+  .overlay-title {
+    font-family: 'Zen Antique', serif;
+    font-size: 2rem;
+    margin-bottom: 8px;
+  }
+
+  .overlay-sub {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 28px;
+    letter-spacing: 0.1em;
+  }
+
+  .overlay-btns { display: flex; gap: 12px; justify-content: center; }
+</style>
+</head>
+<body>
+
+<h1>〇×ゲーム</h1>
+<p class="subtitle">2 PLAYER BATTLE</p>
+
+<div class="scoreboard">
+  <div class="player-card o-card active" id="card-o">
+    <div class="player-label">PLAYER 1</div>
+    <div class="player-symbol">〇</div>
+    <div class="player-score" id="score-o">0</div>
+  </div>
+  <div class="vs-badge">VS</div>
+  <div class="player-card x-card" id="card-x">
+    <div class="player-label">PLAYER 2</div>
+    <div class="player-symbol">×</div>
+    <div class="player-score" id="score-x">0</div>
+  </div>
+</div>
+
+<div class="status" id="status" style="color: var(--o-color)">
+  <span class="status-dot"></span>
+  <span id="status-text">〇 の番です</span>
+</div>
+
+<div class="board-wrap">
+  <div class="board" id="board">
+    <div class="cell" data-i="0"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="1"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="2"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="3"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="4"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="5"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="6"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="7"><span class="cell-inner"></span></div>
+    <div class="cell" data-i="8"><span class="cell-inner"></span></div>
+  </div>
+</div>
+
+<div class="btn-row">
+  <button class="btn" onclick="resetBoard()">もう一度</button>
+  <button class="btn" onclick="resetAll()">スコアリセット</button>
+</div>
+
+<!-- Win Overlay -->
+<div class="overlay" id="overlay">
+  <div class="overlay-card">
+    <div class="overlay-emoji" id="ol-emoji">🎉</div>
+    <div class="overlay-title" id="ol-title"></div>
+    <div class="overlay-sub" id="ol-sub"></div>
+    <div class="overlay-btns">
+      <button class="btn primary" onclick="resetBoard()">次のゲーム</button>
+      <button class="btn" onclick="resetAll()">最初から</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const WINS = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+let board = Array(9).fill(null);
+let current = 'o';
+let scores = { o: 0, x: 0 };
+let gameOver = false;
+
+const cells = document.querySelectorAll('.cell');
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('status-text');
+const overlay = document.getElementById('overlay');
+
+function updateStatus() {
+  const label = current === 'o' ? '〇' : '×';
+  const color = current === 'o' ? 'var(--o-color)' : 'var(--x-color)';
+  statusEl.style.color = color;
+  statusText.textContent = `${label} の番です`;
+
+  document.getElementById('card-o').classList.toggle('active', current === 'o');
+  document.getElementById('card-x').classList.toggle('active', current === 'x');
+}
+
+function checkWin() {
+  for (const [a,b,c] of WINS) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return { winner: board[a], line: [a,b,c] };
+    }
+  }
+  if (board.every(Boolean)) return { winner: null, line: [] };
+  return null;
+}
+
+cells.forEach(cell => {
+  cell.addEventListener('click', () => {
+    const i = +cell.dataset.i;
+    if (board[i] || gameOver) return;
+
+    board[i] = current;
+    cell.classList.add('taken', current);
+    cell.querySelector('.cell-inner').textContent = current === 'o' ? '〇' : '×';
+
+    const result = checkWin();
+    if (result !== null) {
+      gameOver = true;
+      if (result.winner) {
+        result.line.forEach(idx => cells[idx].classList.add('win'));
+        scores[result.winner]++;
+        document.getElementById(`score-${result.winner}`).textContent = scores[result.winner];
+        const label = result.winner === 'o' ? '〇' : '×';
+        setTimeout(() => showOverlay('win', label), 500);
+      } else {
+        setTimeout(() => showOverlay('draw'), 500);
+      }
+      return;
+    }
+
+    current = current === 'o' ? 'x' : 'o';
+    updateStatus();
+  });
+});
+
+function showOverlay(type, label) {
+  const emoji = document.getElementById('ol-emoji');
+  const title = document.getElementById('ol-title');
+  const sub = document.getElementById('ol-sub');
+
+  if (type === 'win') {
+    emoji.textContent = '🎉';
+    title.textContent = `${label} の勝ち！`;
+    sub.textContent = 'おめでとうございます！';
+  } else {
+    emoji.textContent = '🤝';
+    title.textContent = '引き分け！';
+    sub.textContent = 'いい勝負でした！';
+  }
+
+  overlay.classList.add('show');
+}
+
+function resetBoard() {
+  board = Array(9).fill(null);
+  gameOver = false;
+  cells.forEach(cell => {
+    cell.className = 'cell';
+    cell.querySelector('.cell-inner').textContent = '';
+  });
+  overlay.classList.remove('show');
+  updateStatus();
+}
+
+function resetAll() {
+  scores = { o: 0, x: 0 };
+  document.getElementById('score-o').textContent = 0;
+  document.getElementById('score-x').textContent = 0;
+  current = 'o';
+  resetBoard();
+}
+
+updateStatus();
+</script>
+</body>
+</html>
